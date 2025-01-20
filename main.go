@@ -2,8 +2,12 @@ package main
 
 import(
     "net/http"
-    "fmt"
+    "log"
 )
+
+type apiHandler struct{};
+
+func (apiHandler) ServeHTTP(http.ResponseWriter, *http.Request){};
 
 func main(){
     
@@ -14,13 +18,12 @@ func main(){
         Addr: ":8080",
     };
     
-    err := server.ListenAndServe();
-    fmt.Printf("Server Started!\n");
+    file_server_handler := http.FileServer(http.Dir("."));
+    serv_mux.Handle("/", file_server_handler); // register the handle with the pattern /
 
-    if err != nil{
-        fmt.Printf("Error with the server %v", err);
-        return;
-    }
+    log.Printf("Server Starting!\n");
+    log.Fatal(server.ListenAndServe()); //tcp listener and create a new service for each conncection
+    log.Printf("Server Stopped!\n");
 
-   return; 
+    return; 
 }
