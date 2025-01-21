@@ -1,46 +1,49 @@
 package main
 
 import(
-    "net/http"
     "log"
+    "sync/atomic"
+    "net/http"
 )
 
+type apiConfig struct {
+    file_server_hits atomic.Int32
+};
 
-var file_server_handler http.Handler;
+func (cfg *apiConfig) metrics_middleware(next http.Handler) http.Handler{
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request){
+    cfg.file_server_hits.Add(1); //increment view counter
+    next.ServeHTTP(w, r);
+    });
+}
 
-func readiness_handler(w http.ResponseWriter,req *http.Request){
-    content_type := make([]string,1);
-    content_type[0] = "text/plain; charset=utf-8";
+func register_api_endpoints(serv_mux *http.ServeMux, conf *apiConfig){
 
-    header_map := w.Header(); 
-    header_map["Content-Type"] = content_type;
-
-    w.WriteHeader(http.StatusOK); // techinically not needed if we call Write it automatically sets content-type, statusOk and, if small enough message, content-length
-    body := "OK";
-    _, err := w.Write([]byte(body));
-    if err != nil{
-        log.Printf("Error Writing %v\n", err);
-    }
-    return;
+    serv_mux.HandleFunc("/healthz",  readiness_handler); 
+    serv_mux.HandleFunc("/metrics",  conf.metrics_handler); 
+    serv_mux.HandleFunc("/reset",  conf.reset_metrics_handler);
 }
 
 func main(){
     
     serv_mux := http.NewServeMux();
 
-    server := http.Server{
+    server := &http.Server{
         Handler: serv_mux,
         Addr: ":8080",
     };
     
-    file_server_handler = http.FileServer(http.Dir(".")); // the . is the local file dir from which files will be served
-    serv_mux.Handle("/app/", http.StripPrefix("/app",http.HandlerFunc(func(w http.ResponseWriter, r *http.Request){
+    file_server_handler := http.FileServer(http.Dir(".")); // the . is the local file dir from which files will be served
+    var conf apiConfig;
+
+    cache_control_handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request){
         w.Header().Set("Cache-Control", "no-store");
         file_server_handler.ServeHTTP(w, r);
-    }))); // This is wrapper on the file_server_handler passed to prevent etag caching (might remove later)
-         // Remove /app prefix from the url req path /app/home.png -> /home.png which will then be served by ./home.png
+    }); 
 
-    serv_mux.HandleFunc("/healthz",  readiness_handler); // pass a handler func for the readiness check endpoint
+    serv_mux.Handle("/app/", http.StripPrefix("/app", conf.metrics_middleware(cache_control_handler)));
+
+    register_api_endpoints(serv_mux, &conf);
 
     log.Printf("Server Starting!\n");
     log.Fatal(server.ListenAndServe()); //tcp listener and create a new service for each conncection
