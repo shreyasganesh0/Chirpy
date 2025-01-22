@@ -19,9 +19,9 @@ func (cfg *apiConfig) metrics_middleware(next http.Handler) http.Handler{
 
 func register_api_endpoints(serv_mux *http.ServeMux, conf *apiConfig){
 
-    serv_mux.HandleFunc("/healthz",  readiness_handler); 
-    serv_mux.HandleFunc("/metrics",  conf.metrics_handler); 
-    serv_mux.HandleFunc("/reset",  conf.reset_metrics_handler);
+    serv_mux.HandleFunc("GET /api/healthz",  readiness_handler); 
+    serv_mux.HandleFunc("GET /admin/metrics",  conf.metrics_handler); 
+    serv_mux.HandleFunc("POST /admin/reset",  conf.reset_metrics_handler);
 }
 
 func main(){

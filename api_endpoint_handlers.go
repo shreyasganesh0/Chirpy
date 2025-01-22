@@ -4,7 +4,7 @@ package main
 import(
     "log"
     "net/http"
-    "strconv"
+    "fmt"
 )
 
 func readiness_handler(w http.ResponseWriter,req *http.Request){
@@ -25,8 +25,26 @@ func readiness_handler(w http.ResponseWriter,req *http.Request){
 
 func (cfg *apiConfig) metrics_handler(w http.ResponseWriter, req *http.Request){
 
-    body := "Hits: " + strconv.FormatInt(int64(cfg.file_server_hits.Load()), 10); 
-    _, err := w.Write([]byte(body));
+    var header_elements []tag_level;
+    body_elements := make([]tag_level, 2);
+    body_elements[0] = tag_level{
+        tag: H1,
+        level: 1,
+        text: "Welcome, Chirpy Admin",
+    };
+
+    body_elements[1] = tag_level{
+        tag: P,
+        level: 1,
+        text: fmt.Sprintf("Chirpy has been visited %v times!", int64(cfg.file_server_hits.Load())),
+    };
+
+    html, err_html :=  generate_html(header_elements, body_elements);
+    if err_html != nil{
+        log.Printf("%v", err_html);
+    }
+
+    _, err := w.Write([]byte(html));
     if err != nil {
         log.Printf("Error writing to body %v\n", err);
     }
