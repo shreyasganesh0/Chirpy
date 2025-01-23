@@ -3,8 +3,10 @@ package main
 
 import(
     "log"
-    "net/http"
     "fmt"
+    "strings"
+    "net/http"
+    "encoding/json"
 )
 
 func readiness_handler(w http.ResponseWriter,req *http.Request){
@@ -44,6 +46,7 @@ func (cfg *apiConfig) metrics_handler(w http.ResponseWriter, req *http.Request){
         log.Printf("%v", err_html);
     }
 
+    w.Header().Set("Content-Type", "text/html");
     _, err := w.Write([]byte(html));
     if err != nil {
         log.Printf("Error writing to body %v\n", err);
@@ -55,5 +58,115 @@ func (cfg *apiConfig) reset_metrics_handler(w http.ResponseWriter, req *http.Req
 
     cfg.file_server_hits.Store(0);
     log.Printf("Server hits count reset\n");
+    return;
+}
+
+func validate_chirp_handler(w http.ResponseWriter, req *http.Request){
+
+    type validation_req struct {
+        Body string `json:"body"`
+    };
+
+    type len_err_response struct {
+        Error string `json:"error"`
+    };
+    
+    type valid_response struct {
+        CleanedBody string `json:"cleaned_body"` 
+    };
+
+    var val_req validation_req
+    var err_resp len_err_response
+    var valid_resp valid_response
+    var status_code int
+    profane_word_list := []string{"kerfuffle", "sharbert", "fornax"};
+
+   // decoding req part 
+    decoder := json.NewDecoder(req.Body);
+    err := decoder.Decode(&val_req);
+    if err != nil {
+        log.Printf("error parsing json\n%verr\n");
+        err_resp.Error = "Something went wrong";
+        status_code = http.StatusBadRequest;
+
+        resp, err := json.Marshal(err_resp);
+        if err != nil{
+            log.Printf("Failed response marshalling\n");
+            return;
+        }
+        w.Header().Set("Content-Type", "application/json");
+        w.WriteHeader(status_code);
+        _, err1 := w.Write(resp); 
+        if err1 != nil {
+            log.Printf("Error writing to body %v\n", err1);
+        }
+        return;
+    }
+
+    // validation part
+    body_len := len(val_req.Body)
+    if body_len > 140 {
+        log.Printf("Characters length too long: %v\n", body_len);
+        err_resp.Error = "Chirp is too long";
+        status_code = http.StatusBadRequest;
+        resp, err := json.Marshal(err_resp);
+        if err != nil{
+            log.Printf("Failed response marshalling\n");
+            return;
+        }
+        w.Header().Set("Content-Type", "application/json");
+        w.WriteHeader(status_code);
+        _, err1 := w.Write(resp); 
+        if err1 != nil {
+            log.Printf("Error writing to body %v\n", err1);
+        }
+        return;
+    }
+
+    // valid response part
+    status_code = http.StatusOK;
+    
+    response_string_slice := make([]string, 1);
+    curr_word := "";
+    for _, char := range val_req.Body{ // convert it to a slice of words from a single string
+        if (char == ' '){
+            response_string_slice = append(response_string_slice, curr_word);
+            curr_word = "";
+            continue;
+        }
+        curr_word =curr_word + string(char);
+    }
+    response_string_slice = append(response_string_slice, curr_word);
+    
+    var output_str string;
+    p_flag := false;
+    for _, word := range response_string_slice{ // remove profane words
+        for _, profane_word := range profane_word_list{
+            if profane_word == strings.ToLower(word){
+                output_str = output_str + " ****";
+                p_flag = true;
+                break;
+            }
+        }
+        if p_flag == true{
+            p_flag = false;
+            continue;
+        }
+        output_str = output_str + " " + word;
+    }
+
+    output_str = output_str[2:];
+    valid_resp.CleanedBody = output_str; 
+    resp, err := json.Marshal(valid_resp);
+    if err != nil{
+        log.Printf("Failed response marshalling\n");
+        return;
+    }
+    w.Header().Set("Content-Type", "application/json");
+    w.WriteHeader(status_code);
+    _, err1 := w.Write(resp); 
+    if err1 != nil {
+        log.Printf("Error writing to body %v\n", err1);
+    }
     return;
 }
