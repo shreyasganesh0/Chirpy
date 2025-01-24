@@ -4,45 +4,59 @@ package main
 import(
     "log"
     "fmt"
+	"time"
     "strings"
     "net/http"
     "encoding/json"
+	"github.com/google/uuid"
+
 )
 
 func (cfg *apiConfig) users_handler(w http.ResponseWriter, req *http.Request) {
     type user_t struct {
         Email string `json:"email"`
     };
+    type resp_t struct {
+        ID        uuid.UUID `json:"id"`
+        CreatedAt time.Time `json:"created_at"`
+        UpdatedAt time.Time `json:"updated_at"`
+        Email     string `json:"email"`
+    };
     var user_req user_t;
 
     decoder := json.NewDecoder(req.Body);
     err := decoder.Decode(&user_req);
     if err != nil {
-        fmt.Printf("%v\n", err);
+        log.Printf("%v\n", err);
         return;
     }
 
     user, err1 := cfg.queries.CreateUser(req.Context(), user_req.Email); 
     if err1 != nil{
-        fmt.Printf("%v\n", err);
+        log.Printf("%v\n", err);
         return;
     }
 
-    resp, err2 := json.Marshal(&user);
+    resp := resp_t{
+        ID: user.ID,       
+        CreatedAt: user.CreatedAt,
+        UpdatedAt: user.UpdatedAt, 
+        Email: user.Email,
+    };
+    resp_byte, err2 := json.Marshal(&resp);
     if err2 != nil{
-        fmt.Printf("%v\n", err);
+        log.Printf("%v\n", err);
         return; 
     }
-    
     w.Header().Set("Content-Type", "application/json");
-    _, err3 := w.Write(resp);
+    w.WriteHeader(http.StatusCreated);
+    _, err3 := w.Write(resp_byte);
     if err3 != nil{
-        fmt.Printf("%v\n", err);
+        log.Printf("%v\n", err);
         return;
     }
     return;
 }
-
 
 
 func readiness_handler(w http.ResponseWriter,req *http.Request){
@@ -91,6 +105,20 @@ func (cfg *apiConfig) metrics_handler(w http.ResponseWriter, req *http.Request){
 }
 
 func (cfg *apiConfig) reset_metrics_handler(w http.ResponseWriter, req *http.Request){
+
+    if cfg.platform != "dev"{
+        log.Printf("This endpoint cannot be accessed by PLATFORM %v\n", cfg.platform);
+        w.WriteHeader(http.StatusForbidden);
+        body := "forbidden";
+        w.Write([]byte(body));
+        return;
+    }
+    err := cfg.queries.ResetTables(req.Context());
+    if err != nil{
+        log.Printf("Failed to reset tables\n");
+        return;
+    }
+    log.Printf("Tables reset, all rows deleted\n");
 
     cfg.file_server_hits.Store(0);
     log.Printf("Server hits count reset\n");

@@ -7,12 +7,14 @@ import(
     "sync/atomic"
     "net/http"
     _ "github.com/lib/pq"
+    "github.com/joho/godotenv"
     "github.com/shreyasganesh0/chirpy/database"
 )
 
 type apiConfig struct {
     file_server_hits atomic.Int32
     queries *database.Queries
+    platform string
 };
 
 func (cfg *apiConfig) metrics_middleware(next http.Handler) http.Handler{
@@ -34,8 +36,12 @@ func register_api_endpoints(serv_mux *http.ServeMux, conf *apiConfig){
 func main(){
 
     var conf apiConfig;
+    godotenv.Load();
+
+    conf.platform = os.Getenv("PLATFORM");
 
     db_url := os.Getenv("DB_URL");
+    log.Printf("db url %v\n",db_url);
     db, err := sql.Open("postgres", db_url);
     if err != nil{
         log.Printf("%v\n",err);
