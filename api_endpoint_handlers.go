@@ -5,12 +5,99 @@ import(
     "log"
     "fmt"
 	"time"
-    "strings"
     "net/http"
     "encoding/json"
 	"github.com/google/uuid"
+    "github.com/shreyasganesh0/chirpy/database"
 
 )
+
+type validation_req struct {
+    Body string `json:"body"`
+    UserID uuid.UUID `json:"user_id"` 
+};
+
+type chirp_resp_t struct {
+    ID        uuid.UUID `json:"id"` 
+    CreatedAt time.Time `json:"created_at"`
+    UpdatedAt time.Time `json:"updated_at"`
+    Body string `json:"body"`
+    UserID uuid.UUID `json:"user_id"` 
+}
+
+
+func (cfg *apiConfig) get_chirps_handler(w http.ResponseWriter, req *http.Request) {
+
+    chirps, err := cfg.queries.GetAllChirps(req.Context());
+    if err != nil {
+        log.Printf("%v\n", err);
+        return;
+    }
+
+    var chirps_resp []chirp_resp_t;
+    for _, chirp := range chirps{
+        chirp_resp := chirp_resp_t{
+            ID: chirp.ID,
+            CreatedAt: chirp.CreatedAt,
+            UpdatedAt: chirp.UpdatedAt,
+            Body: chirp.Body,
+            UserID: chirp.UserID,
+        };
+        chirps_resp = append(chirps_resp, chirp_resp);
+    }
+    chirps_byte, err1 := json.Marshal(chirps_resp);
+    if err1 != nil {
+        log.Printf("%v\n", err);
+        return;
+    }
+    w.Header().Set("Content-Type", "application/json");
+    w.WriteHeader(http.StatusOK);
+    _, err2 := w.Write(chirps_byte);
+    if err2 != nil{
+        log.Printf("%v\n", err2);
+        return;
+    }
+    return;
+}
+
+
+func (cfg *apiConfig) chirps_handler(w http.ResponseWriter, req *http.Request) {
+    var val_req validation_req;
+
+    err := validate_chirp(w, req, &val_req);
+    if err != nil{
+        log.Printf("%v\n", err);
+        return;
+    }
+    
+    query_args := database.CreateChirpParams{
+        Body: val_req.Body,
+        UserID: val_req.UserID,
+    };
+
+    chirp, err := cfg.queries.CreateChirp(req.Context(), query_args);
+    chirp_resp := chirp_resp_t{
+        ID: chirp.ID,
+        CreatedAt: chirp.CreatedAt,
+        UpdatedAt: chirp.UpdatedAt,
+        Body: chirp.Body,
+        UserID:  chirp.UserID,
+    };
+
+    resp, err_json := json.Marshal(&chirp_resp);
+    if err_json != nil {
+        fmt.Printf("Error writing to body %v\n", err_json);
+        return;
+    }
+    w.Header().Set("Content-Type", "application/json");
+    w.WriteHeader(http.StatusCreated);
+    _, err1 := w.Write(resp); 
+    if err1 != nil {
+        fmt.Printf("Error writing to body %v\n", err1);
+    }
+    return;
+}
+
 
 func (cfg *apiConfig) users_handler(w http.ResponseWriter, req *http.Request) {
     type user_t struct {
@@ -125,25 +212,13 @@ func (cfg *apiConfig) reset_metrics_handler(w http.ResponseWriter, req *http.Req
     return;
 }
 
-func validate_chirp_handler(w http.ResponseWriter, req *http.Request){
-
-    type validation_req struct {
-        Body string `json:"body"`
-    };
+func validate_chirp(w http.ResponseWriter, req *http.Request, val_req *validation_req) error{
 
     type len_err_response struct {
         Error string `json:"error"`
     };
     
-    type valid_response struct {
-        CleanedBody string `json:"cleaned_body"` 
-    };
-
-    var val_req validation_req
     var err_resp len_err_response
-    var valid_resp valid_response
-    var status_code int
-    profane_word_list := []string{"kerfuffle", "sharbert", "fornax"};
 
    // decoding req part 
     decoder := json.NewDecoder(req.Body);
@@ -151,86 +226,26 @@ func validate_chirp_handler(w http.ResponseWriter, req *http.Request){
     if err != nil {
         log.Printf("error parsing json\n%verr\n");
         err_resp.Error = "Something went wrong";
-        status_code = http.StatusBadRequest;
-
-        resp, err := json.Marshal(err_resp);
-        if err != nil{
-            log.Printf("Failed response marshalling\n");
-            return;
-        }
-        w.Header().Set("Content-Type", "application/json");
-        w.WriteHeader(status_code);
-        _, err1 := w.Write(resp); 
-        if err1 != nil {
-            log.Printf("Error writing to body %v\n", err1);
-        }
-        return;
     }
 
     // validation part
     body_len := len(val_req.Body)
     if body_len > 140 {
-        log.Printf("Characters length too long: %v\n", body_len);
         err_resp.Error = "Chirp is too long";
-        status_code = http.StatusBadRequest;
+    }
+
+    if err_resp.Error != ""{
+        status_code := http.StatusBadRequest;
         resp, err := json.Marshal(err_resp);
         if err != nil{
-            log.Printf("Failed response marshalling\n");
-            return;
+            return fmt.Errorf("Failed response marshalling %v\n", err);
         }
         w.Header().Set("Content-Type", "application/json");
         w.WriteHeader(status_code);
-        _, err1 := w.Write(resp); 
-        if err1 != nil {
-            log.Printf("Error writing to body %v\n", err1);
-        }
-        return;
+        w.Write(resp);
+        return fmt.Errorf("Chirp invalid, request sent");
     }
+    return nil
 
-    // valid response part
-    status_code = http.StatusOK;
-    
-    response_string_slice := make([]string, 1);
-    curr_word := "";
-    for _, char := range val_req.Body{ // convert it to a slice of words from a single string
-        if (char == ' '){
-            response_string_slice = append(response_string_slice, curr_word);
-            curr_word = "";
-            continue;
-        }
-        curr_word =curr_word + string(char);
-    }
-    response_string_slice = append(response_string_slice, curr_word);
-    
-    var output_str string;
-    p_flag := false;
-    for _, word := range response_string_slice{ // remove profane words
-        for _, profane_word := range profane_word_list{
-            if profane_word == strings.ToLower(word){
-                output_str = output_str + " ****";
-                p_flag = true;
-                break;
-            }
-        }
-        if p_flag == true{
-            p_flag = false;
-            continue;
-        }
-        output_str = output_str + " " + word;
-    }
-
-    output_str = output_str[2:];
-    valid_resp.CleanedBody = output_str; 
-    resp, err := json.Marshal(valid_resp);
-    if err != nil{
-        log.Printf("Failed response marshalling\n");
-        return;
-    }
-    w.Header().Set("Content-Type", "application/json");
-    w.WriteHeader(status_code);
-    _, err1 := w.Write(resp); 
-    if err1 != nil {
-        log.Printf("Error writing to body %v\n", err1);
-    }
-    return;
 }
+

@@ -29,8 +29,9 @@ func register_api_endpoints(serv_mux *http.ServeMux, conf *apiConfig){
     serv_mux.HandleFunc("GET /api/healthz",  readiness_handler); 
     serv_mux.HandleFunc("GET /admin/metrics",  conf.metrics_handler); 
     serv_mux.HandleFunc("POST /admin/reset",  conf.reset_metrics_handler);
-    serv_mux.HandleFunc("POST /api/validate_chirp", validate_chirp_handler);
     serv_mux.HandleFunc("POST /api/users", conf.users_handler);
+    serv_mux.HandleFunc("POST /api/chirps", conf.chirps_handler);
+    serv_mux.HandleFunc("GET /api/chirps", conf.get_chirps_handler);
 }
 
 func main(){
