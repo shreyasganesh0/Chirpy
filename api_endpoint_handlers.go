@@ -26,6 +26,38 @@ type chirp_resp_t struct {
 }
 
 
+func (cfg *apiConfig) get_chirp_by_id_handler(w http.ResponseWriter, req *http.Request) {
+    uuid_val,err := uuid.Parse(req.PathValue("chirpID")); if err != nil{
+        log.Printf("%v\n", err);
+        return;
+    }
+    chirp, err := cfg.queries.GetChirpByID(req.Context(), uuid_val); 
+    if err != nil {
+        log.Printf("%v\n", err);
+        return;
+    }
+
+    chirp_resp := chirp_resp_t{
+        ID: chirp.ID,
+        CreatedAt: chirp.CreatedAt,
+        UpdatedAt: chirp.UpdatedAt,
+        Body: chirp.Body,
+        UserID: chirp.UserID,
+    };
+    chirp_byte, err1 := json.Marshal(chirp_resp);
+    if err1 != nil {
+        log.Printf("%v\n", err);
+        return;
+    }
+    w.Header().Set("Content-Type", "application/json");
+    w.WriteHeader(http.StatusOK);
+    _, err2 := w.Write(chirp_byte);
+    if err2 != nil{
+        log.Printf("%v\n", err2);
+        return;
+    }
+    return;
+}
 func (cfg *apiConfig) get_chirps_handler(w http.ResponseWriter, req *http.Request) {
 
     chirps, err := cfg.queries.GetAllChirps(req.Context());
