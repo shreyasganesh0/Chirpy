@@ -1,7 +1,8 @@
 -- name: CreateUser :one
-INSERT INTO users(email)
+INSERT INTO users(email, hashed_password)
 VALUES(
-    $1
+    $1,
+    $2
 ) RETURNING *;
 
 -- name: ResetTables :exec
@@ -21,4 +22,8 @@ ORDER BY created_at ASC;
 -- name: GetChirpByID :one
 SELECT * FROM chirps
 WHERE id = $1;
+
+-- name: GetUserByEmail :one
+SELECT * FROM users
+where email = $1;
 

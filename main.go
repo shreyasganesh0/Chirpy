@@ -8,7 +8,7 @@ import(
     "net/http"
     _ "github.com/lib/pq"
     "github.com/joho/godotenv"
-    "github.com/shreyasganesh0/chirpy/database"
+    "github.com/shreyasganesh0/Chirpy/database"
 )
 
 type apiConfig struct {
@@ -30,6 +30,7 @@ func register_api_endpoints(serv_mux *http.ServeMux, conf *apiConfig){
     serv_mux.HandleFunc("GET /admin/metrics",  conf.metrics_handler); 
     serv_mux.HandleFunc("POST /admin/reset",  conf.reset_metrics_handler);
     serv_mux.HandleFunc("POST /api/users", conf.users_handler);
+    serv_mux.HandleFunc("POST /api/login", conf.login_handler);
     serv_mux.HandleFunc("POST /api/chirps", conf.chirps_handler);
     serv_mux.HandleFunc("GET /api/chirps", conf.get_chirps_handler);
     serv_mux.HandleFunc("GET /api/chirps/{chirpID}", conf.get_chirp_by_id_handler);

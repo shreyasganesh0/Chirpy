@@ -8,9 +8,17 @@ import(
     "net/http"
     "encoding/json"
 	"github.com/google/uuid"
-    "github.com/shreyasganesh0/chirpy/database"
+    "github.com/shreyasganesh0/Chirpy/database"
+    "github.com/shreyasganesh0/Chirpy/auth"
 
 )
+
+type user_resp_t struct {
+    ID        uuid.UUID `json:"id"`
+    CreatedAt time.Time `json:"created_at"`
+    UpdatedAt time.Time `json:"updated_at"`
+    Email     string `json:"email"`
+};
 
 type validation_req struct {
     Body string `json:"body"`
@@ -23,8 +31,58 @@ type chirp_resp_t struct {
     UpdatedAt time.Time `json:"updated_at"`
     Body string `json:"body"`
     UserID uuid.UUID `json:"user_id"` 
-}
+};
 
+type user_t struct {
+    Password string `json:"password"`
+    Email string `json:"email"`
+};
+
+func (cfg *apiConfig) login_handler(w http.ResponseWriter, req *http.Request) {
+    var login_inp user_t;
+
+    decoder := json.NewDecoder(req.Body);
+    err1 := decoder.Decode(&login_inp);
+    if err1 != nil{
+        log.Printf("%v\n", err1);
+        return;
+    }
+
+    user, err := cfg.queries.GetUserByEmail(req.Context(), login_inp.Email);    
+    if err != nil{
+        log.Printf("%v\n", err);
+        return;
+    }
+
+    err_hash := myauth.ComparePassHash(login_inp.Password, user.HashedPassword);
+    if err_hash != nil{
+        w.WriteHeader(http.StatusUnauthorized);
+        w.Write([]byte("incorrect username or password\n"));
+        return;
+    }
+
+    user_resp := user_resp_t{
+        ID: user.ID,
+        CreatedAt: user.CreatedAt,
+        UpdatedAt: user.UpdatedAt,
+        Email: user.Email,
+    };
+
+    resp_byte, err_marsh := json.Marshal(&user_resp);
+    if err_marsh != nil{
+        log.Printf("%v\n", err);
+        return;
+    }
+
+    w.WriteHeader(http.StatusOK);
+    _, err_write := w.Write(resp_byte);
+    if err_write != nil{
+        log.Printf("%v\n", err_write);
+        return;
+    }
+
+    return;
+} 
 
 func (cfg *apiConfig) get_chirp_by_id_handler(w http.ResponseWriter, req *http.Request) {
     uuid_val,err := uuid.Parse(req.PathValue("chirpID")); if err != nil{
@@ -132,15 +190,6 @@ func (cfg *apiConfig) chirps_handler(w http.ResponseWriter, req *http.Request) {
 
 
 func (cfg *apiConfig) users_handler(w http.ResponseWriter, req *http.Request) {
-    type user_t struct {
-        Email string `json:"email"`
-    };
-    type resp_t struct {
-        ID        uuid.UUID `json:"id"`
-        CreatedAt time.Time `json:"created_at"`
-        UpdatedAt time.Time `json:"updated_at"`
-        Email     string `json:"email"`
-    };
     var user_req user_t;
 
     decoder := json.NewDecoder(req.Body);
@@ -150,13 +199,24 @@ func (cfg *apiConfig) users_handler(w http.ResponseWriter, req *http.Request) {
         return;
     }
 
-    user, err1 := cfg.queries.CreateUser(req.Context(), user_req.Email); 
+    hash_pass, err_hash := myauth.EncryptPassword(user_req.Password);
+    if err_hash != nil{
+        log.Printf("%v\n", err);
+        return;
+    }
+
+    query_args := database.CreateUserParams{
+        Email: user_req.Email,
+        HashedPassword: hash_pass,
+    };
+
+    user, err1 := cfg.queries.CreateUser(req.Context(), query_args); 
     if err1 != nil{
         log.Printf("%v\n", err);
         return;
     }
 
-    resp := resp_t{
+    resp := user_resp_t{
         ID: user.ID,       
         CreatedAt: user.CreatedAt,
         UpdatedAt: user.UpdatedAt, 
@@ -176,7 +236,6 @@ func (cfg *apiConfig) users_handler(w http.ResponseWriter, req *http.Request) {
     }
     return;
 }
-
 
 func readiness_handler(w http.ResponseWriter,req *http.Request){
     content_type := make([]string,1);
@@ -256,7 +315,7 @@ func validate_chirp(w http.ResponseWriter, req *http.Request, val_req *validatio
     decoder := json.NewDecoder(req.Body);
     err := decoder.Decode(&val_req);
     if err != nil {
-        log.Printf("error parsing json\n%verr\n");
+        log.Printf("error parsing json\n%v",err);
         err_resp.Error = "Something went wrong";
     }
 
