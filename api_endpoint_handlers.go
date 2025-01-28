@@ -18,11 +18,11 @@ type user_resp_t struct {
     CreatedAt time.Time `json:"created_at"`
     UpdatedAt time.Time `json:"updated_at"`
     Email     string `json:"email"`
+    Token string `json:"token"`
 };
 
 type validation_req struct {
     Body string `json:"body"`
-    UserID uuid.UUID `json:"user_id"` 
 };
 
 type chirp_resp_t struct {
@@ -36,9 +36,12 @@ type chirp_resp_t struct {
 type user_t struct {
     Password string `json:"password"`
     Email string `json:"email"`
+    ExpiresInSeconds int `json:"expires_in_seconds"`
 };
 
 func (cfg *apiConfig) login_handler(w http.ResponseWriter, req *http.Request) {
+    // POST /api/login
+
     var login_inp user_t;
 
     decoder := json.NewDecoder(req.Body);
@@ -61,11 +64,22 @@ func (cfg *apiConfig) login_handler(w http.ResponseWriter, req *http.Request) {
         return;
     }
 
+    if login_inp.ExpiresInSeconds < 1 || login_inp.ExpiresInSeconds > 3600 {
+        login_inp.ExpiresInSeconds = 3600;
+    }
+
+    jwt_token, err_jwt := myauth.MakeJWT(user.ID, cfg.jwt_secret, time.Duration(login_inp.ExpiresInSeconds) * time.Second);
+    if err_jwt != nil{
+        log.Printf("Error in jwt creation: %v\n", err_jwt);
+        return;
+    }
+
     user_resp := user_resp_t{
         ID: user.ID,
         CreatedAt: user.CreatedAt,
         UpdatedAt: user.UpdatedAt,
         Email: user.Email,
+        Token: jwt_token,
     };
 
     resp_byte, err_marsh := json.Marshal(&user_resp);
@@ -152,17 +166,41 @@ func (cfg *apiConfig) get_chirps_handler(w http.ResponseWriter, req *http.Reques
 
 
 func (cfg *apiConfig) chirps_handler(w http.ResponseWriter, req *http.Request) {
-    var val_req validation_req;
+    //POST /api/chirps
 
+    var val_req validation_req;
     err := validate_chirp(w, req, &val_req);
     if err != nil{
         log.Printf("%v\n", err);
         return;
     }
+
+    bearer_token, err_bearer := myauth.GetBearerToken(req.Header);
+    if err_bearer != nil{
+        log.Printf("Error while retrieving bearer token: %v\n", err_bearer);
+        return;
+    }
+    
+    log.Printf("Bearer token: %v\n", bearer_token);
+    user_id, err_val := myauth.ValidateJWT(bearer_token, cfg.jwt_secret);
+    if err_val != nil{
+        log.Printf("Error while validating jwt %v\n", err_val);
+        return;
+    }
+
+    var err_id uuid.UUID
+    if user_id == err_id{
+        w.WriteHeader(http.StatusUnauthorized);
+        _, err := w.Write([]byte("Unauthorized user for post"));
+        if err != nil {
+           log.Print("Error sending message to unauth user while creating chrip\n"); 
+        }
+        return;
+    }
     
     query_args := database.CreateChirpParams{
         Body: val_req.Body,
-        UserID: val_req.UserID,
+        UserID: user_id,
     };
 
     chirp, err := cfg.queries.CreateChirp(req.Context(), query_args);

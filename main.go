@@ -15,6 +15,7 @@ type apiConfig struct {
     file_server_hits atomic.Int32
     queries *database.Queries
     platform string
+    jwt_secret string
 };
 
 func (cfg *apiConfig) metrics_middleware(next http.Handler) http.Handler{
@@ -42,6 +43,8 @@ func main(){
     godotenv.Load();
 
     conf.platform = os.Getenv("PLATFORM");
+    
+    conf.jwt_secret = os.Getenv("SECRET");
 
     db_url := os.Getenv("DB_URL");
     log.Printf("db url %v\n",db_url);

@@ -3,6 +3,7 @@ package myauth
 import(
     "fmt"
     "time"
+    "net/http"
     "github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
     "golang.org/x/crypto/bcrypt"
@@ -65,17 +66,27 @@ func ValidateJWT(token_string string, token_secret string) (uuid.UUID, error){
         return err_uid, err;
     }
 
-    user_id, err := token.Claims.GetSubject();
-    if err != nil {
-        return err_uid, err;
-    }
-        
-    uuid_user, err1 := uuid.Parse(user_id);
+    user_id, err1 := token.Claims.GetSubject();
     if err1 != nil {
         return err_uid, err1;
     }
+        
+    uuid_user, err2 := uuid.Parse(user_id);
+    if err2 != nil {
+        return err_uid, err2;
+    }
     return uuid_user, nil;
 }
+ 
 
+func GetBearerToken(header http.Header) (string, error){
+    
+    bearer_str := header.Get("Authorization");
+    if bearer_str == "" {
+        return "", fmt.Errorf("The header Authorization wsa not found\n");
+    }
 
+    bearer_str = bearer_str[7:];
 
+    return bearer_str, nil;
+}
