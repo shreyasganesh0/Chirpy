@@ -7,6 +7,8 @@ package database
 
 import (
 	"context"
+	"database/sql"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -33,6 +35,42 @@ func (q *Queries) CreateChirp(ctx context.Context, arg CreateChirpParams) (Chirp
 		&i.UpdatedAt,
 		&i.Body,
 		&i.UserID,
+	)
+	return i, err
+}
+
+const createRefreshTokens = `-- name: CreateRefreshTokens :one
+INSERT INTO refresh_tokens(token, user_id, expires_at, revoked_at)
+VALUES(
+    $1,
+    $2,
+    $3,
+    $4
+) RETURNING token, created_at, updated_at, user_id, expires_at, revoked_at
+`
+
+type CreateRefreshTokensParams struct {
+	Token     string
+	UserID    uuid.UUID
+	ExpiresAt time.Time
+	RevokedAt sql.NullTime
+}
+
+func (q *Queries) CreateRefreshTokens(ctx context.Context, arg CreateRefreshTokensParams) (RefreshToken, error) {
+	row := q.db.QueryRowContext(ctx, createRefreshTokens,
+		arg.Token,
+		arg.UserID,
+		arg.ExpiresAt,
+		arg.RevokedAt,
+	)
+	var i RefreshToken
+	err := row.Scan(
+		&i.Token,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.UserID,
+		&i.ExpiresAt,
+		&i.RevokedAt,
 	)
 	return i, err
 }
@@ -133,11 +171,44 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 	return i, err
 }
 
+const getUserFromRefreshToken = `-- name: GetUserFromRefreshToken :one
+SELECT user_id, revoked_at from refresh_tokens
+WHERE token = $1
+`
+
+type GetUserFromRefreshTokenRow struct {
+	UserID    uuid.UUID
+	RevokedAt sql.NullTime
+}
+
+func (q *Queries) GetUserFromRefreshToken(ctx context.Context, token string) (GetUserFromRefreshTokenRow, error) {
+	row := q.db.QueryRowContext(ctx, getUserFromRefreshToken, token)
+	var i GetUserFromRefreshTokenRow
+	err := row.Scan(&i.UserID, &i.RevokedAt)
+	return i, err
+}
+
 const resetTables = `-- name: ResetTables :exec
 DELETE FROM users
 `
 
 func (q *Queries) ResetTables(ctx context.Context) error {
 	_, err := q.db.ExecContext(ctx, resetTables)
+	return err
+}
+
+const revokeToken = `-- name: RevokeToken :exec
+UPDATE refresh_tokens
+SET revoked_at = $1
+WHERE token = $2
+`
+
+type RevokeTokenParams struct {
+	RevokedAt sql.NullTime
+	Token     string
+}
+
+func (q *Queries) RevokeToken(ctx context.Context, arg RevokeTokenParams) error {
+	_, err := q.db.ExecContext(ctx, revokeToken, arg.RevokedAt, arg.Token)
 	return err
 }

@@ -7,6 +7,7 @@ import(
 	"time"
     "net/http"
     "encoding/json"
+	"database/sql"
 	"github.com/google/uuid"
     "github.com/shreyasganesh0/Chirpy/database"
     "github.com/shreyasganesh0/Chirpy/auth"
@@ -19,6 +20,7 @@ type user_resp_t struct {
     UpdatedAt time.Time `json:"updated_at"`
     Email     string `json:"email"`
     Token string `json:"token"`
+    RefreshToken string `json:"refresh_token"`
 };
 
 type validation_req struct {
@@ -36,13 +38,91 @@ type chirp_resp_t struct {
 type user_t struct {
     Password string `json:"password"`
     Email string `json:"email"`
-    ExpiresInSeconds int `json:"expires_in_seconds"`
 };
+
+func (cfg *apiConfig) revoke_refresh_token_handler(w http.ResponseWriter, req *http.Request) {
+    // POST /api/revoke
+
+    refresh_token, err_refresh := myauth.GetBearerToken(req.Header);
+    if err_refresh != nil{
+        log.Printf("Error getting refresh token from header %v\n", err_refresh);
+        return;
+    }
+
+    revoke_args := database.RevokeTokenParams{
+        RevokedAt: sql.NullTime{
+            Time: time.Now(),
+            Valid: true,
+        },
+        Token: refresh_token,
+    }
+
+    err_revoke := cfg.queries.RevokeToken(req.Context(), revoke_args);
+    if err_revoke != nil{
+        log.Printf("Error getting refresh token from header %v\n", err_revoke);
+        return;
+    }
+
+    w.WriteHeader(http.StatusNoContent);
+    _, err := w.Write(nil);
+    if err != nil{
+        log.Printf("Error while trying to revoke %v\n");
+    }
+    return;
+}
+
+func (cfg *apiConfig) refresh_token_handler(w http.ResponseWriter, req *http.Request) {
+    // POST /api/refresh
+
+    type refresh_resp_t struct {
+        Token string `json:"token"`
+    }
+
+    var nil_revoke_time sql.NullTime;
+
+    refresh_token, err_refresh := myauth.GetBearerToken(req.Header);
+    if err_refresh != nil{
+        log.Printf("Error getting refresh token from header %v\n", err_refresh);
+    }
+
+    user_revok, err_get_token := cfg.queries.GetUserFromRefreshToken(req.Context(), refresh_token);
+    if err_get_token != nil || user_revok.RevokedAt != nil_revoke_time{
+        w.WriteHeader(http.StatusUnauthorized);
+        _, err := w.Write([]byte("Refresh token expired or does not exist\n"));
+        if err != nil{
+            log.Printf("Failed to write\n");
+            return;
+        }
+        return;
+    }
+
+    jwt_token, err_jwt := myauth.MakeJWT(user_revok.UserID, cfg.jwt_secret, 3600 * time.Second);
+    if err_jwt != nil{
+        log.Printf("Error in jwt creation: %v\n", err_jwt);
+        return;
+    }
+
+    refresh_resp := refresh_resp_t{
+        Token: jwt_token,
+    };
+    resp_json, err := json.Marshal(&refresh_resp);
+    if err != nil{
+        log.Printf("Failed to serialize refresh token jwt to json\n");
+        return;
+    }
+    w.WriteHeader(http.StatusOK);
+    _, err_w := w.Write(resp_json);
+    if err_w != nil{
+        log.Printf("Failed writing new jwt after refresh\n");
+    }
+    return;
+}
 
 func (cfg *apiConfig) login_handler(w http.ResponseWriter, req *http.Request) {
     // POST /api/login
 
     var login_inp user_t;
+    var nil_revoke_time sql.NullTime;
 
     decoder := json.NewDecoder(req.Body);
     err1 := decoder.Decode(&login_inp);
@@ -64,14 +144,26 @@ func (cfg *apiConfig) login_handler(w http.ResponseWriter, req *http.Request) {
         return;
     }
 
-    if login_inp.ExpiresInSeconds < 1 || login_inp.ExpiresInSeconds > 3600 {
-        login_inp.ExpiresInSeconds = 3600;
-    }
-
-    jwt_token, err_jwt := myauth.MakeJWT(user.ID, cfg.jwt_secret, time.Duration(login_inp.ExpiresInSeconds) * time.Second);
+    jwt_token, err_jwt := myauth.MakeJWT(user.ID, cfg.jwt_secret, 3600 * time.Second);
     if err_jwt != nil{
         log.Printf("Error in jwt creation: %v\n", err_jwt);
         return;
+    }
+
+    refresh_token, err_refresh := myauth.MakeRefreshToken();
+    if err_refresh != nil{
+        log.Printf("Error while creating refresh token %v\n", err_refresh);
+    }
+
+    refresh_query := database.CreateRefreshTokensParams{
+        Token: refresh_token,
+        UserID: user.ID,
+        ExpiresAt: time.Now().Add(60 * 24 * time.Hour),
+        RevokedAt: nil_revoke_time,
+    };
+    _, err_create_refresh := cfg.queries.CreateRefreshTokens(req.Context(), refresh_query);
+    if err_create_refresh != nil{
+        log.Printf("Error while creating refresh token db entry %v\n", err_create_refresh);
     }
 
     user_resp := user_resp_t{
@@ -80,6 +172,7 @@ func (cfg *apiConfig) login_handler(w http.ResponseWriter, req *http.Request) {
         UpdatedAt: user.UpdatedAt,
         Email: user.Email,
         Token: jwt_token,
+        RefreshToken: refresh_token,
     };
 
     resp_byte, err_marsh := json.Marshal(&user_resp);
@@ -182,14 +275,11 @@ func (cfg *apiConfig) chirps_handler(w http.ResponseWriter, req *http.Request) {
     }
     
     log.Printf("Bearer token: %v\n", bearer_token);
+    
     user_id, err_val := myauth.ValidateJWT(bearer_token, cfg.jwt_secret);
-    if err_val != nil{
-        log.Printf("Error while validating jwt %v\n", err_val);
-        return;
-    }
 
     var err_id uuid.UUID
-    if user_id == err_id{
+    if err_val != nil || user_id == err_id{
         w.WriteHeader(http.StatusUnauthorized);
         _, err := w.Write([]byte("Unauthorized user for post"));
         if err != nil {
