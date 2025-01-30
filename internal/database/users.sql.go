@@ -212,3 +212,29 @@ func (q *Queries) RevokeToken(ctx context.Context, arg RevokeTokenParams) error 
 	_, err := q.db.ExecContext(ctx, revokeToken, arg.RevokedAt, arg.Token)
 	return err
 }
+
+const updateEmailPasswordUser = `-- name: UpdateEmailPasswordUser :one
+UPDATE users
+SET email = $1, hashed_password = $2
+WHERE id = $3
+RETURNING id, created_at, updated_at, email, hashed_password
+`
+
+type UpdateEmailPasswordUserParams struct {
+	Email          string
+	HashedPassword string
+	ID             uuid.UUID
+}
+
+func (q *Queries) UpdateEmailPasswordUser(ctx context.Context, arg UpdateEmailPasswordUserParams) (User, error) {
+	row := q.db.QueryRowContext(ctx, updateEmailPasswordUser, arg.Email, arg.HashedPassword, arg.ID)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Email,
+		&i.HashedPassword,
+	)
+	return i, err
+}

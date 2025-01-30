@@ -5,6 +5,7 @@ import(
     "log"
     "fmt"
 	"time"
+    "regexp"
     "net/http"
     "encoding/json"
 	"database/sql"
@@ -23,6 +24,13 @@ type user_resp_t struct {
     RefreshToken string `json:"refresh_token"`
 };
 
+type user_create_update_resp_t struct {
+    ID        uuid.UUID `json:"id"`
+    CreatedAt time.Time `json:"created_at"`
+    UpdatedAt time.Time `json:"updated_at"`
+    Email     string `json:"email"`
+};
+
 type validation_req struct {
     Body string `json:"body"`
 };
@@ -35,10 +43,89 @@ type chirp_resp_t struct {
     UserID uuid.UUID `json:"user_id"` 
 };
 
-type user_t struct {
+type user_req_t struct {
     Password string `json:"password"`
     Email string `json:"email"`
 };
+
+func (cfg *apiConfig) update_user_handler(w http.ResponseWriter, req *http.Request) {
+    // PUT /api/users
+    
+    var req_body user_req_t;
+    
+    access_token, err_refresh := myauth.GetBearerToken(req.Header);
+    if err_refresh != nil{
+        log.Printf("Error getting refresh token from header %v\n", err_refresh);
+    }
+    
+    user_id, err_jwt := myauth.ValidateJWT(access_token, cfg.jwt_secret);
+    if err_jwt != nil {
+        log.Printf("Error validating jwt\n");
+    }
+
+    if err_jwt != nil || err_refresh != nil {
+        w.WriteHeader(http.StatusUnauthorized);
+        _, err_write := w.Write([]byte("Invalid access token\n"));
+        if err_write != nil {
+            log.Printf("Writing to body error\n");
+        }
+    }
+
+    decoder := json.NewDecoder(req.Body);
+    err_create_decoder := decoder.Decode(&req_body);
+    if err_create_decoder != nil {
+        log.Printf("Error decoding the request while updating the header\n");
+        return;
+    }
+
+
+    hashed_pass, err_hash := myauth.EncryptPassword(req_body.Password);
+    if err_hash != nil{
+        log.Printf("Failed to hash password\n");
+        return;
+    }
+
+    email_regex := `^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`;
+
+    re := regexp.MustCompile(email_regex);
+    if re.MatchString(req_body.Email){
+    //valid email
+    } else{
+        log.Printf("Invalid email sent\n");
+        return;
+    }
+
+    query_args := database.UpdateEmailPasswordUserParams{ 
+        Email: req_body.Email,
+        HashedPassword: hashed_pass,
+        ID: user_id,
+    };
+    user, err_update := cfg.queries.UpdateEmailPasswordUser(req.Context(), query_args);
+    if err_update != nil{
+        log.Printf("Error Updating user\n %v", err_update);
+        return;
+    }
+
+    user_resp := user_create_update_resp_t{
+        ID: user.ID,        
+        CreatedAt: user.CreatedAt, 
+        UpdatedAt: user.UpdatedAt, 
+        Email: user.Email,
+    }
+
+    resp_byte, err_marsh := json.Marshal(&user_resp);
+    if err_marsh != nil{
+        log.Printf("Error marshalling: %v\n");
+        return;
+    }
+
+    w.WriteHeader(http.StatusOK);
+    _, err_write := w.Write([]byte(resp_byte));
+    if err_write != nil{
+        log.Printf("Error writing to client: %v\n");
+        return;
+    }
+}
 
 func (cfg *apiConfig) revoke_refresh_token_handler(w http.ResponseWriter, req *http.Request) {
     // POST /api/revoke
@@ -121,7 +208,7 @@ func (cfg *apiConfig) refresh_token_handler(w http.ResponseWriter, req *http.Req
 func (cfg *apiConfig) login_handler(w http.ResponseWriter, req *http.Request) {
     // POST /api/login
 
-    var login_inp user_t;
+    var login_inp user_req_t;
     var nil_revoke_time sql.NullTime;
 
     decoder := json.NewDecoder(req.Body);
@@ -223,6 +310,7 @@ func (cfg *apiConfig) get_chirp_by_id_handler(w http.ResponseWriter, req *http.R
     }
     return;
 }
+
 func (cfg *apiConfig) get_chirps_handler(w http.ResponseWriter, req *http.Request) {
 
     chirps, err := cfg.queries.GetAllChirps(req.Context());
@@ -318,7 +406,7 @@ func (cfg *apiConfig) chirps_handler(w http.ResponseWriter, req *http.Request) {
 
 
 func (cfg *apiConfig) users_handler(w http.ResponseWriter, req *http.Request) {
-    var user_req user_t;
+    var user_req user_req_t;
 
     decoder := json.NewDecoder(req.Body);
     err := decoder.Decode(&user_req);
@@ -344,7 +432,7 @@ func (cfg *apiConfig) users_handler(w http.ResponseWriter, req *http.Request) {
         return;
     }
 
-    resp := user_resp_t{
+    resp := user_create_update_resp_t{
         ID: user.ID,       
         CreatedAt: user.CreatedAt,
         UpdatedAt: user.UpdatedAt, 

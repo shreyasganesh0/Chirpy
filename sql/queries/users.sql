@@ -44,3 +44,9 @@ WHERE token = $1;
 UPDATE refresh_tokens
 SET revoked_at = $1
 WHERE token = $2; 
+
+-- name: UpdateEmailPasswordUser :one
+UPDATE users
+SET email = $1, hashed_password = $2
+WHERE id = $3
+RETURNING *;
