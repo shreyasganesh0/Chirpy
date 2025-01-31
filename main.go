@@ -27,17 +27,21 @@ func (cfg *apiConfig) metrics_middleware(next http.Handler) http.Handler{
 
 func register_api_endpoints(serv_mux *http.ServeMux, conf *apiConfig){
 
+    serv_mux.HandleFunc("GET /api/chirps", conf.get_chirps_handler);
+    serv_mux.HandleFunc("GET /api/chirps/{chirpID}", conf.get_chirp_by_id_handler);
     serv_mux.HandleFunc("GET /api/healthz",  readiness_handler); 
     serv_mux.HandleFunc("GET /admin/metrics",  conf.metrics_handler); 
+
     serv_mux.HandleFunc("POST /admin/reset",  conf.reset_metrics_handler);
     serv_mux.HandleFunc("POST /api/users", conf.users_handler);
-    serv_mux.HandleFunc("PUT /api/users", conf.update_user_handler);
     serv_mux.HandleFunc("POST /api/login", conf.login_handler);
     serv_mux.HandleFunc("POST /api/revoke", conf.revoke_refresh_token_handler);
     serv_mux.HandleFunc("POST /api/refresh", conf.refresh_token_handler);
     serv_mux.HandleFunc("POST /api/chirps", conf.chirps_handler);
-    serv_mux.HandleFunc("GET /api/chirps", conf.get_chirps_handler);
-    serv_mux.HandleFunc("GET /api/chirps/{chirpID}", conf.get_chirp_by_id_handler);
+
+    serv_mux.HandleFunc("PUT /api/users", conf.update_user_handler);
+
+    serv_mux.HandleFunc("DELETE /api/chirps/{chirpID}", conf.delete_chirp_handler);
 }
 
 func main(){

@@ -48,6 +48,73 @@ type user_req_t struct {
     Email string `json:"email"`
 };
 
+func (cfg *apiConfig) delete_chirp_handler(w http.ResponseWriter, req *http.Request) {
+    // DELETE /api/chirps/{chirpsID}
+
+    access_token, err_bearer := myauth.GetBearerToken(req.Header);
+    if err_bearer != nil{
+        log.Printf("Error getting access token from header\n");
+    }
+
+    user_id, err_jwt := myauth.ValidateJWT(access_token, cfg.jwt_secret);
+    if err_jwt != nil{
+        log.Printf("Error validating jwt token\n");
+    }
+
+    if err_bearer != nil || err_jwt != nil {
+        w.WriteHeader(http.StatusUnauthorized);
+        _, err_w := w.Write([]byte("Unauthorized user to delete chirp\n"));
+        if err_w != nil {
+            log.Printf("Failed to send response from chirp deletion\n");
+        }
+        return;
+    }
+    chirp_id, err_path := uuid.Parse(req.PathValue("chirpID")); 
+    if err_path != nil{
+        log.Printf("%v\n", err_path);
+    }
+
+    query_args := database.DeleteChirpByIdForUserParams{
+        UserID: user_id,
+        ID: chirp_id,
+    };
+    user_id_chirp, err_q := cfg.queries.DeleteChirpByIdForUser(req.Context(), query_args);
+    if err_q != nil {
+        log.Printf("Invalid user, query to delete chirp failed\n");
+        w.WriteHeader(http.StatusNotFound);
+        _, err_write := w.Write([]byte("Unauthorized to delete chirp\n"));
+        if err_write != nil{
+            log.Printf("Sending of message failed\n");
+        }
+        return;
+    }
+
+
+    user_id_int8stream, ok := user_id_chirp.([]uint8);
+    if !ok {
+        log.Printf("Failed to convert\n");
+    }
+    user_id_chirp_conv, _:= uuid.Parse(string(user_id_int8stream));
+
+    log.Printf("old and new user_id : %v ,\n %v \n", user_id_chirp_conv, user_id);
+    if user_id_chirp_conv != user_id { 
+        w.WriteHeader(http.StatusForbidden);
+        _, err_w := w.Write([]byte(nil));
+        if err_w != nil {
+            log.Printf("Failed to send response from chirp deletion\n");
+        }
+        return;
+    }
+
+    w.WriteHeader(http.StatusNoContent);
+    _, err_write := w.Write([]byte(nil));
+    if err_write != nil {
+        log.Printf("Failed to send response in chirp deletion\n");
+    }
+    return;
+
+}
+
 func (cfg *apiConfig) update_user_handler(w http.ResponseWriter, req *http.Request) {
     // PUT /api/users
     
@@ -69,6 +136,7 @@ func (cfg *apiConfig) update_user_handler(w http.ResponseWriter, req *http.Reque
         if err_write != nil {
             log.Printf("Writing to body error\n");
         }
+        return;
     }
 
     decoder := json.NewDecoder(req.Body);
@@ -279,6 +347,8 @@ func (cfg *apiConfig) login_handler(w http.ResponseWriter, req *http.Request) {
 } 
 
 func (cfg *apiConfig) get_chirp_by_id_handler(w http.ResponseWriter, req *http.Request) {
+    //GET /api/chirps/{chirpID}
+
     uuid_val,err := uuid.Parse(req.PathValue("chirpID")); if err != nil{
         log.Printf("%v\n", err);
         return;
@@ -286,6 +356,11 @@ func (cfg *apiConfig) get_chirp_by_id_handler(w http.ResponseWriter, req *http.R
     chirp, err := cfg.queries.GetChirpByID(req.Context(), uuid_val); 
     if err != nil {
         log.Printf("%v\n", err);
+        w.WriteHeader(http.StatusNotFound);
+        _, err_w := w.Write(nil);
+        if err_w != nil{
+            log.Printf("Failed writitng error resp in get chirp\n");
+        }
         return;
     }
 

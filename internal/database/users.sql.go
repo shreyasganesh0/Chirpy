@@ -101,6 +101,28 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 	return i, err
 }
 
+const deleteChirpByIdForUser = `-- name: DeleteChirpByIdForUser :one
+WITH delete_attempt AS (
+    DELETE FROM chirps
+    WHERE chirps.id = $1 AND chirps.user_id = $2
+    RETURNING chirps.id, chirps.user_id
+)
+SELECT 
+    COALESCE((SELECT delete_attempt.user_id FROM delete_attempt), (SELECT chirps.user_id FROM chirps WHERE chirps.id = $1)) AS user_id
+`
+
+type DeleteChirpByIdForUserParams struct {
+	ID     uuid.UUID
+	UserID uuid.UUID
+}
+
+func (q *Queries) DeleteChirpByIdForUser(ctx context.Context, arg DeleteChirpByIdForUserParams) (interface{}, error) {
+	row := q.db.QueryRowContext(ctx, deleteChirpByIdForUser, arg.ID, arg.UserID)
+	var user_id interface{}
+	err := row.Scan(&user_id)
+	return user_id, err
+}
+
 const getAllChirps = `-- name: GetAllChirps :many
 SELECT id, created_at, updated_at, body, user_id FROM chirps
 ORDER BY created_at ASC

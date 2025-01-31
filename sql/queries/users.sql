@@ -50,3 +50,12 @@ UPDATE users
 SET email = $1, hashed_password = $2
 WHERE id = $3
 RETURNING *;
+
+-- name: DeleteChirpByIdForUser :one
+WITH delete_attempt AS (
+    DELETE FROM chirps
+    WHERE chirps.id = $1 AND chirps.user_id = $2
+    RETURNING chirps.id, chirps.user_id
+)
+SELECT 
+    COALESCE((SELECT delete_attempt.user_id FROM delete_attempt), (SELECT chirps.user_id FROM chirps WHERE chirps.id = $1)) AS user_id;
