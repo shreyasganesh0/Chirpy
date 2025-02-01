@@ -85,7 +85,7 @@ func GetBearerToken(header http.Header) (string, error){
     
     bearer_str := header.Get("Authorization");
     if bearer_str == "" {
-        return "", fmt.Errorf("The header Authorization wsa not found\n");
+        return "", fmt.Errorf("The header Authorization was not found\n");
     }
 
     bearer_str = bearer_str[7:];
@@ -106,3 +106,16 @@ func MakeRefreshToken() (string, error){
 
     return refresh_token, nil;
 }
+
+func GetAPIKey(header http.Header) (string, error){
+
+    api_key := header.Get("Authorization");
+    if api_key == "" {
+        return "", fmt.Errorf("The header Authorization was not found\n");
+    }
+
+    api_key = api_key[7:];
+
+    return api_key, nil;
+}
+

@@ -16,6 +16,7 @@ type apiConfig struct {
     queries *database.Queries
     platform string
     jwt_secret string
+    api_key_polka string
 };
 
 func (cfg *apiConfig) metrics_middleware(next http.Handler) http.Handler{
@@ -53,6 +54,7 @@ func main(){
     conf.platform = os.Getenv("PLATFORM");
     
     conf.jwt_secret = os.Getenv("SECRET");
+    conf.api_key_polka = os.Getenv("POLKA_KEY");
 
     db_url := os.Getenv("DB_URL");
     log.Printf("db url %v\n",db_url);

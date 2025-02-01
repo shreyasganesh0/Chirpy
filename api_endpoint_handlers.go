@@ -68,6 +68,22 @@ func (cfg *apiConfig) upgrade_user_handler(w http.ResponseWriter, req *http.Requ
         log.Printf("Error while decoding req in webhook: %v\n", err_decoder);
     }
 
+    api_key, err_api := myauth.GetAPIKey(req.Header);
+    if err_api != nil{
+        log.Printf("%v\n", err_api);
+    }
+
+    if err_api != nil || api_key != cfg.api_key_polka{
+        log.Printf("Api key got was %v, expect was %v\n", api_key, cfg.api_key_polka);
+
+        w.WriteHeader(http.StatusUnauthorized);
+        _, err_w := w.Write(nil);
+        if err_w != nil{
+            log.Printf("Error while sending response in webhook %v\n", err_w);
+        }
+        return;
+    }
+
     if webhook_req.Event != "user.upgraded" || err_decoder != nil{
         w.WriteHeader(http.StatusNoContent);
         _, err_w := w.Write(nil);
