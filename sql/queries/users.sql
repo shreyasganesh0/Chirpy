@@ -59,3 +59,8 @@ WITH delete_attempt AS (
 )
 SELECT 
     COALESCE((SELECT delete_attempt.user_id FROM delete_attempt), (SELECT chirps.user_id FROM chirps WHERE chirps.id = $1)) AS user_id;
+
+-- name: UpgradeUserToRed :exec
+UPDATE users
+SET is_chirpy_red = true
+WHERE id = $1;

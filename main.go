@@ -38,6 +38,7 @@ func register_api_endpoints(serv_mux *http.ServeMux, conf *apiConfig){
     serv_mux.HandleFunc("POST /api/revoke", conf.revoke_refresh_token_handler);
     serv_mux.HandleFunc("POST /api/refresh", conf.refresh_token_handler);
     serv_mux.HandleFunc("POST /api/chirps", conf.chirps_handler);
+    serv_mux.HandleFunc("POST /api/polka/webhooks", conf.upgrade_user_handler);
 
     serv_mux.HandleFunc("PUT /api/users", conf.update_user_handler);
 

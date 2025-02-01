@@ -22,6 +22,7 @@ type user_resp_t struct {
     Email     string `json:"email"`
     Token string `json:"token"`
     RefreshToken string `json:"refresh_token"`
+    IsChirpyRed bool `json:"is_chirpy_red"`
 };
 
 type user_create_update_resp_t struct {
@@ -29,6 +30,7 @@ type user_create_update_resp_t struct {
     CreatedAt time.Time `json:"created_at"`
     UpdatedAt time.Time `json:"updated_at"`
     Email     string `json:"email"`
+    IsChirpyRed bool `json:"is_chirpy_red"`
 };
 
 type validation_req struct {
@@ -47,6 +49,57 @@ type user_req_t struct {
     Password string `json:"password"`
     Email string `json:"email"`
 };
+
+func (cfg *apiConfig) upgrade_user_handler(w http.ResponseWriter, req *http.Request) {
+    //POST /api/pokla/webhooks
+
+    type webhook_req_t struct {
+        Event string `json:"event"`
+        Data struct {
+            UserID uuid.UUID `json:"user_id"`
+        } `json:"data"`
+    };
+    
+    var webhook_req webhook_req_t;
+
+    decoder := json.NewDecoder(req.Body);
+    err_decoder := decoder.Decode(&webhook_req);
+    if err_decoder != nil{
+        log.Printf("Error while decoding req in webhook: %v\n", err_decoder);
+    }
+
+    if webhook_req.Event != "user.upgraded" || err_decoder != nil{
+        w.WriteHeader(http.StatusNoContent);
+        _, err_w := w.Write(nil);
+        if err_w != nil{
+            log.Printf("Error while sending response in webhook %v\n", err_w);
+        }
+        return;
+    }
+
+    err_query := cfg.queries.UpgradeUserToRed(req.Context(), webhook_req.Data.UserID);
+    if err_query != nil{
+        log.Printf("Error executing update query: %v\n", err_query);
+    }
+    
+    if err_query == nil {
+        w.WriteHeader(http.StatusNoContent);
+        _, err_w := w.Write(nil);
+        if err_w != nil{
+            log.Printf("Error while sending response in webhook %v\n", err_w);
+        }
+        return;
+    } else{
+        log.Printf("User not found: %v\n", err_query);
+        w.WriteHeader(http.StatusNotFound);
+        _, err_w := w.Write(nil);
+        if err_w != nil{
+            log.Printf("Error while sending response in webhook %v\n", err_w);
+        }
+        return;
+    }
+    return;
+}
 
 func (cfg *apiConfig) delete_chirp_handler(w http.ResponseWriter, req *http.Request) {
     // DELETE /api/chirps/{chirpsID}
@@ -179,6 +232,7 @@ func (cfg *apiConfig) update_user_handler(w http.ResponseWriter, req *http.Reque
         CreatedAt: user.CreatedAt, 
         UpdatedAt: user.UpdatedAt, 
         Email: user.Email,
+        IsChirpyRed: user.IsChirpyRed,
     }
 
     resp_byte, err_marsh := json.Marshal(&user_resp);
@@ -328,6 +382,7 @@ func (cfg *apiConfig) login_handler(w http.ResponseWriter, req *http.Request) {
         Email: user.Email,
         Token: jwt_token,
         RefreshToken: refresh_token,
+        IsChirpyRed: user.IsChirpyRed,
     };
 
     resp_byte, err_marsh := json.Marshal(&user_resp);
