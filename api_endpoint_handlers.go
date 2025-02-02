@@ -459,31 +459,58 @@ func (cfg *apiConfig) get_chirp_by_id_handler(w http.ResponseWriter, req *http.R
 }
 
 func (cfg *apiConfig) get_chirps_handler(w http.ResponseWriter, req *http.Request) {
-    //GET /api/chirps
+    //GET /api/chirps?author_id=xxx&sort=asc/desc
 
     author_id := req.URL.Query().Get("author_id");
+    sort := req.URL.Query().Get("sort");
     
     var chirps []database.Chirp;
     var err_query error;
+
     switch author_id{
         case "":
 
-            chirps, err_query = cfg.queries.GetAllChirps(req.Context());
-            if err_query != nil {
-                log.Printf("%v\n", err_query);
-                return;
+            if sort == "desc"{
+
+                chirps, err_query = cfg.queries.GetAllChirpsDESC(req.Context());
+                if err_query != nil {
+                    log.Printf("%v\n", err_query);
+                    return;
+                }
+            } else {
+
+                chirps, err_query = cfg.queries.GetAllChirps(req.Context());
+                if err_query != nil {
+                    log.Printf("%v\n", err_query);
+                    return;
+                }
             }
 
         default:
-            uuid_author, parse_err := uuid.Parse(author_id);
-            if parse_err != nil{
-                log.Printf("Parse error to uuid for author: %v\n", parse_err);
-                return;
-            }
-            chirps, err_query = cfg.queries.GetAllChirpsByAuthor(req.Context(), uuid_author);
-            if err_query != nil {
-                log.Printf("%v\n", err_query);
-                return;
+            if sort == "desc"{
+                uuid_author, parse_err := uuid.Parse(author_id);
+
+                if parse_err != nil{
+                    log.Printf("Parse error to uuid for author: %v\n", parse_err);
+                    return;
+                }
+                chirps, err_query = cfg.queries.GetAllChirpsByAuthorDESC(req.Context(), uuid_author);
+                if err_query != nil {
+                    log.Printf("%v\n", err_query);
+                    return;
+                }
+            } else {
+                uuid_author, parse_err := uuid.Parse(author_id);
+
+                if parse_err != nil{
+                    log.Printf("Parse error to uuid for author: %v\n", parse_err);
+                    return;
+                }
+                chirps, err_query = cfg.queries.GetAllChirpsByAuthor(req.Context(), uuid_author);
+                if err_query != nil {
+                    log.Printf("%v\n", err_query);
+                    return;
+                }
             }
     }
 
