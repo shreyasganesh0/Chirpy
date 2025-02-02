@@ -15,6 +15,19 @@ JWT token for access and Refresh tokens to create JWT tokens.
 - sqlc for go
 
 ## Usage
+- GET /api/chirps
+    - ? query params sort chirps by ascending (asc) and descending (desc)
+    - ? query params author_id sort chirps user id
 
-
+- GET /api/chirps/{chirpID}
+- GET /api/healthz 
+- GET /admin/metrics 
+- POST /admin/reset
+- POST /api/users
+- POST /api/login
+- POST /api/revoke
+- POST /api/chirps
+- POST /api/polka/webhooks
+- PUT /api/users
+- DELETE /api/chirps/{chirpID}
 
