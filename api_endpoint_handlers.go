@@ -50,6 +50,7 @@ type user_req_t struct {
     Email string `json:"email"`
 };
 
+
 func (cfg *apiConfig) upgrade_user_handler(w http.ResponseWriter, req *http.Request) {
     //POST /api/pokla/webhooks
 
@@ -458,11 +459,32 @@ func (cfg *apiConfig) get_chirp_by_id_handler(w http.ResponseWriter, req *http.R
 }
 
 func (cfg *apiConfig) get_chirps_handler(w http.ResponseWriter, req *http.Request) {
+    //GET /api/chirps
 
-    chirps, err := cfg.queries.GetAllChirps(req.Context());
-    if err != nil {
-        log.Printf("%v\n", err);
-        return;
+    author_id := req.URL.Query().Get("author_id");
+    
+    var chirps []database.Chirp;
+    var err_query error;
+    switch author_id{
+        case "":
+
+            chirps, err_query = cfg.queries.GetAllChirps(req.Context());
+            if err_query != nil {
+                log.Printf("%v\n", err_query);
+                return;
+            }
+
+        default:
+            uuid_author, parse_err := uuid.Parse(author_id);
+            if parse_err != nil{
+                log.Printf("Parse error to uuid for author: %v\n", parse_err);
+                return;
+            }
+            chirps, err_query = cfg.queries.GetAllChirpsByAuthor(req.Context(), uuid_author);
+            if err_query != nil {
+                log.Printf("%v\n", err_query);
+                return;
+            }
     }
 
     var chirps_resp []chirp_resp_t;
@@ -478,7 +500,7 @@ func (cfg *apiConfig) get_chirps_handler(w http.ResponseWriter, req *http.Reques
     }
     chirps_byte, err1 := json.Marshal(chirps_resp);
     if err1 != nil {
-        log.Printf("%v\n", err);
+        log.Printf("%v\n", err1);
         return;
     }
     w.Header().Set("Content-Type", "application/json");
