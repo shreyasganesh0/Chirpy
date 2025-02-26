@@ -80,6 +80,7 @@ func main(){
         file_server_handler.ServeHTTP(w, r);
     }); 
 
+    serv_mux.Handle("/", conf.metrics_middleware(cache_control_handler));
     serv_mux.Handle("/app/", http.StripPrefix("/app", conf.metrics_middleware(cache_control_handler)));
 
     register_api_endpoints(serv_mux, &conf);
