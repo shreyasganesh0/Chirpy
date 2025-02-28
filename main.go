@@ -28,6 +28,7 @@ func (cfg *apiConfig) metrics_middleware(next http.Handler) http.Handler{
 
 func register_api_endpoints(serv_mux *http.ServeMux, conf *apiConfig){
 
+    serv_mux.HandleFunc("GET /", conf.docker_handler);
     serv_mux.HandleFunc("GET /api/chirps", conf.get_chirps_handler);
     serv_mux.HandleFunc("GET /api/chirps/{chirpID}", conf.get_chirp_by_id_handler);
     serv_mux.HandleFunc("GET /api/healthz",  readiness_handler); 
@@ -81,7 +82,7 @@ func main(){
     }); 
 
     serv_mux.Handle("/", conf.metrics_middleware(cache_control_handler));
-    serv_mux.Handle("/app/", http.StripPrefix("/app", conf.metrics_middleware(cache_control_handler)));
+    //serv_mux.Handle("/app/", http.StripPrefix("/app", conf.metrics_middleware(cache_control_handler)));
 
     register_api_endpoints(serv_mux, &conf);
 

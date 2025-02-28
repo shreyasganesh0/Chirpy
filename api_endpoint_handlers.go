@@ -4,6 +4,7 @@ package main
 import(
     "log"
     "fmt"
+    "os"
 	"time"
     "regexp"
     "net/http"
@@ -418,6 +419,23 @@ func (cfg *apiConfig) login_handler(w http.ResponseWriter, req *http.Request) {
     return;
 } 
 
+func (cfg *apiConfig) docker_handler(w http.ResponseWriter, req *http.Request) {
+    data, err := os.ReadFile("index.html");
+    if err != nil {
+        log.Printf("Failed to read file index.html\n");
+        return;
+    }
+
+    w.WriteHeader(http.StatusOK);
+    _, err_write := w.Write(data);
+    if err_write != nil {
+        log.Printf("Failed err write: %v\n", err_write);
+        return;
+    }
+    return;
+}
+
+    
 func (cfg *apiConfig) get_chirp_by_id_handler(w http.ResponseWriter, req *http.Request) {
     //GET /api/chirps/{chirpID}
 
